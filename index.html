@@ -526,7 +526,7 @@
     };
 
     const CONFIG = {
-      // https://script.google.com/macros/s/AKfycbxOvRAfvW7QERVgpKeA69SxZvK6_QhQqI0rVCsCOW32p12bgKt-lygPKeaSynK2h9OT/exec
+      // Paste your Google Apps Script web app URL here after you deploy Code.gs
       API_URL: 'https://script.google.com/macros/s/AKfycbxOvRAfvW7QERVgpKeA69SxZvK6_QhQqI0rVCsCOW32p12bgKt-lygPKeaSynK2h9OT/exec'
     };
 
@@ -628,6 +628,10 @@
           currentWeek = parseInt(s.currentWeek, 10) || currentWeek;
           localStorage.setItem('hallam_currentWeek', currentWeek);
         }
+        Object.keys(entries).forEach(w => {
+          Object.keys(entries[w]||{}).forEach(pid => applyLoadFromCheckin(entries[w][pid]));
+        });
+        localStorage.setItem('hallam_entries', JSON.stringify(entries));
         setSyncLabel('Cloud synced ' + new Date().toLocaleTimeString(), true);
         if ((!s.players || !s.players.length) && players.length && !playerMode) {
           pushCloud();
@@ -704,9 +708,10 @@
       const attention = [];
       players.forEach(pl => {
         const e = getEntry(currentWeek, pl.id);
+        applyLoadFromCheckin(e);
         if (e.status==='green') g++;
-        if (e.status==='amber') { a++; attention.push(pl.name + ' (Amber)'); }
-        if (e.status==='red') { r++; attention.push(pl.name + ' (Red)'); }
+        if (e.status==='amber') { a++; attention.push(pl.name + ' (Amber' + (e.weekend && e.weekend!=='None' ? ' · '+e.weekend+' '+e.minutes : '') + (e.niggle==='Yes' ? ' · niggle' : '') + ')'); }
+        if (e.status==='red') { r++; attention.push(pl.name + ' (Red' + (e.niggle==='Yes' ? ' · niggle' : '') + ')'); }
         if (e.niggle==='Yes' && e.status!=='amber' && e.status!=='red') {
           attention.push(pl.name + ' (Niggle)');
         }
@@ -1070,13 +1075,29 @@
       });
     }
 
+    function applyLoadFromCheckin(e) {
+      const played = (e.weekend === 'Saturday' || e.weekend === 'Sunday');
+      const longGame = (e.minutes === '90' || e.minutes === '60-89');
+      if (e.niggle === 'Yes' && played && e.minutes === '90') {
+        e.status = 'red';
+        return;
+      }
+      if (e.niggle === 'Yes') {
+        if (e.status !== 'red') e.status = 'amber';
+        return;
+      }
+      if (played && longGame) {
+        if (e.status !== 'red') e.status = 'amber';
+      }
+    }
+
     function applyCheckinLocal(id, weekend, minutes, niggle, note) {
       const e = getEntry(currentWeek, id);
       e.weekend = weekend;
       e.minutes = minutes;
       e.niggle = niggle;
       if (note) e.notes = (e.notes ? e.notes + ' | ' : '') + note;
-      if (niggle === 'Yes' && e.status !== 'red') e.status = 'amber';
+      applyLoadFromCheckin(e);
       localStorage.setItem('hallam_entries', JSON.stringify(entries));
     }
 
