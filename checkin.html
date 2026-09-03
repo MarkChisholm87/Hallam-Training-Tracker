@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#6B2A40">
+  <title>Hallam Player Check-in</title>
+  <style>
+    :root {
+      --shu-purple: #6B2A40;
+      --bg: #0f0f14;
+      --card: #1a1a24;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --border: #2e2e3a;
+      --green: #22c55e;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .header {
+      background: var(--shu-purple);
+      margin: -16px -16px 16px;
+      padding: 14px 16px;
+    }
+    .header h1 { font-size: 1.15rem; }
+    .header p { font-size: 0.8rem; color: rgba(255,255,255,.85); margin-top: 2px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin: 12px 0 4px; }
+    select, input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 10px;
+      font-size: 1rem;
+    }
+    button {
+      width: 100%;
+      margin-top: 16px;
+      background: var(--shu-purple);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    button:disabled { opacity: .5; }
+    .status { margin-top: 12px; font-size: 0.85rem; color: var(--muted); }
+    .ok { color: var(--green); }
+    .bad { color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Hallam Player Check-in</h1>
+    <p id="weekLabel">Loading…</p>
+  </div>
+  <div class="card">
+    <label>Your name</label>
+    <select id="checkinName"></select>
+    <label>Weekend match</label>
+    <select id="checkinWeekend">
+      <option value="None">None</option>
+      <option value="Saturday">Saturday</option>
+      <option value="Sunday">Sunday</option>
+    </select>
+    <label>Approx minutes</label>
+    <select id="checkinMinutes">
+      <option value="">—</option>
+      <option value="90">90</option>
+      <option value="60-89">60–89</option>
+      <option value="45-59">45–59</option>
+      <option value="<45">&lt;45</option>
+      <option value="Unused">Unused</option>
+    </select>
+    <label>Any niggle or unusual fatigue?</label>
+    <select id="checkinNiggle">
+      <option value="No">No</option>
+      <option value="Yes">Yes</option>
+    </select>
+    <label>Optional note</label>
+    <input id="checkinNote" type="text" placeholder="e.g. tight hamstring">
+    <button id="submitBtn" onclick="submitCheckin()">Submit</button>
+    <div class="status" id="status">Connecting…</div>
+  </div>
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxOvRAfvW7QERVgpKeA69SxZvK6_QhQqI0rVCsCOW32p12bgKt-lygPKeaSynK2h9OT/exec';
+    let players = [];
+    let currentWeek = 1;
+
+    function setStatus(msg, cls) {
+      const el = document.getElementById('status');
+      el.className = 'status ' + (cls || '');
+      el.textContent = msg;
+    }
+
+    async function boot() {
+      try {
+        const res = await fetch(API_URL + '?t=' + Date.now());
+        const data = await res.json();
+        if (!data.ok || !data.state) throw new Error('bad');
+        players = data.state.players || [];
+        currentWeek = parseInt(data.state.currentWeek, 10) || 1;
+        document.getElementById('weekLabel').textContent = 'Week ' + currentWeek + ' · Sheffield Hallam Men';
+        const sel = document.getElementById('checkinName');
+        if (!players.length) {
+          sel.innerHTML = '<option value="">No players yet — coach must add the squad</option>';
+          document.getElementById('submitBtn').disabled = true;
+          setStatus('Waiting for coach to add players', 'bad');
+          return;
+        }
+        sel.innerHTML = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        setStatus('Ready');
+      } catch (err) {
+        setStatus('Could not load form. Try again.', 'bad');
+      }
+    }
+
+    async function submitCheckin() {
+      const id = parseInt(document.getElementById('checkinName').value, 10);
+      if (!id) { setStatus('Pick your name', 'bad'); return; }
+      const weekend = document.getElementById('checkinWeekend').value;
+      const minutes = document.getElementById('checkinMinutes').value;
+      const niggle = document.getElementById('checkinNiggle').value;
+      const note = document.getElementById('checkinNote').value;
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      setStatus('Sending…');
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'checkin',
+            week: currentWeek,
+            playerId: id,
+            weekend, minutes, niggle, note
+          })
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'fail');
+        setStatus('Submitted. You can close this page.', 'ok');
+        btn.textContent = 'Submitted';
+      } catch (err) {
+        setStatus('Submit failed. Check signal and try again.', 'bad');
+        btn.disabled = false;
+      }
+    }
+
+    boot();
+  </script>
+</body>
+</html>
