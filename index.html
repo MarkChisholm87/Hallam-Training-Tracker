@@ -624,9 +624,18 @@
           sessionNotes = s.sessionNotes;
           localStorage.setItem('hallam_sessionNotes', JSON.stringify(sessionNotes));
         }
+        const localWeek = parseInt(localStorage.getItem('hallam_currentWeek') || '0', 10);
         if (s.currentWeek) {
-          currentWeek = parseInt(s.currentWeek, 10) || currentWeek;
+          const cloudWeek = parseInt(s.currentWeek, 10) || 1;
+          // Prefer the coach's locally chosen week if it differs from the cloud default
+          currentWeek = (localWeek && localWeek !== cloudWeek) ? localWeek : cloudWeek;
           localStorage.setItem('hallam_currentWeek', currentWeek);
+          if (localWeek && localWeek !== cloudWeek) {
+            // push the coach's week so player check-ins use it
+            setTimeout(() => pushCloud(), 300);
+          }
+        } else if (localWeek) {
+          currentWeek = localWeek;
         }
         Object.keys(entries).forEach(w => {
           Object.keys(entries[w]||{}).forEach(pid => applyLoadFromCheckin(entries[w][pid]));
@@ -725,6 +734,7 @@
     function openWeek(w) {
       currentWeek = w;
       localStorage.setItem('hallam_currentWeek', w);
+      pushCloud();
       showScreen('session');
     }
 
@@ -735,7 +745,7 @@
         const chip = document.createElement('div');
         chip.className = 'week-chip' + (i===currentWeek ? ' active' : '');
         chip.textContent = 'W' + i;
-        chip.onclick = () => { currentWeek=i; localStorage.setItem('hallam_currentWeek',i); renderSession(); };
+        chip.onclick = () => { currentWeek=i; localStorage.setItem('hallam_currentWeek',i); pushCloud(); renderSession(); };
         sel.appendChild(chip);
       }
 
